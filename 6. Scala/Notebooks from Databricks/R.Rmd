@@ -1,0 +1,109 @@
+
+---
+title: "R"
+output:
+  html_document:
+    toc: true
+---
+
+
+```{r}
+library(SparkR)
+```
+
+
+```{r}
+powerPlant = read.df("/mnt/spark-data/pp.csv", "csv", inferSchema="true", sep=";", header="true")
+```
+
+
+```{r}
+printSchema(powerPlant)
+```
+
+
+```{r}
+display(powerPlant)
+```
+
+
+```{r}
+powerPlant$time <- NULL
+```
+
+
+```{r}
+printSchema(powerPlant)
+```
+
+
+```{r}
+display(describe(powerPlant))
+```
+
+
+```{r}
+powerPlantClean = dropna(powerPlant)
+```
+
+
+```{r}
+df_list = randomSplit(powerPlantClean, c(8,2), seed=273)
+```
+
+
+```{r}
+trainDF = df_list[[1]]
+testDF = df_list[[2]]
+
+print(paste("Train DF Count: ", count(trainDF)))
+print(paste("Test DF Count: ", count(testDF)))
+
+```
+
+
+```{r}
+gbtModel = spark.gbt(trainDF, PE ~ AT + V + AP + RH, type="regression")
+```
+
+
+```{r}
+summary(gbtModel)
+```
+
+
+```{r}
+#we can also cache in sparkR
+cache(trainDF)
+```
+
+
+```{r}
+predictedDF = predict(gbtModel, trainDF)
+#there is no evaluator class
+```
+
+
+```{r}
+errors <- select(predictedDF, predictedDF$PE, predictedDF$prediction, alias(predictedDF$PE - predictedDF$prediction, "error"))
+display(errors)
+```
+
+
+```{r}
+# Calculate RMSE
+rmse = head(select(errors, alias(sqrt(sum(errors$error^2 , na.rm = TRUE) / nrow(errors)), "RMSE")))
+
+print(paste("RMSE:", rmse))
+```
+
+
+```{r}
+write.ml(gbtModel, "/tmp/gbm.model", overwrite="true")
+```
+
+
+```{r}
+// model = read.ml("/tmp/gbm.model")
+```
+
